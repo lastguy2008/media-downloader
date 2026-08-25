@@ -1,89 +1,54 @@
 import { NextRequest, NextResponse } from "next/server";
 
-interface CobaltSuccessResponse {
-  status: "redirect" | "stream" | "picker";
-  url?: string;
-  picker?: Array<{ url: string; type?: string }>;
-}
-
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
 
-    if (!url || typeof url !== "string" || !url.startsWith("http")) {
+    if (!url || typeof url !== "string") {
       return NextResponse.json(
-        { error: "Please provide a valid media URL." },
+        { error: "Please provide a valid URL" },
         { status: 400 }
       );
     }
 
-    // Active open instances running Cobalt v10 engine
-    const instances = [
-      "https://cobalt-api.ayo.tf/",
-      "https://co.meow.gb.net/",
-      "https://cobalt-api.kwiatekmonster.tokyo/",
-      "https://api.cobalt.tools/",
-    ];
+    // Call RapidAPI Facebook Reel and Video Downloader Endpoint
+    const targetApiUrl = `https://facebook-reel-and-video-downloader.p.rapidapi.com/app/main.php?url=${encodeURIComponent(url)}`;
 
-    let mediaData: CobaltSuccessResponse | null = null;
-    let lastError = "";
+    const response = await fetch(targetApiUrl, {
+      method: "GET",
+      headers: {
+        "x-rapidapi-key": process.env.RAPIDAPI_KEY || "f15b2d3970mshe6a22fcb096bfe8p194187jsn5399724946a7",
+        "x-rapidapi-host": "facebook-reel-and-video-downloader.p.rapidapi.com",
+      },
+    });
 
-    for (const instance of instances) {
-      try {
-        const response = await fetch(instance, {
-          method: "POST",
-          headers: {
-            "Accept": "application/json",
-            "Content-Type": "application/json",
-            "v-api": "10",
-          },
-          body: JSON.stringify({
-            url: url,
-            videoQuality: "max",
-          }),
-        });
+    const data = await response.json();
 
-        if (!response.ok) {
-          const errData = await response.json().catch(() => null);
-          lastError = errData?.text || errData?.error?.code || `HTTP ${response.status}`;
-          continue;
-        }
-
-        const data = await response.json();
-
-        if (data && data.status !== "error") {
-          mediaData = data;
-          break;
-        } else {
-          lastError = data?.text || data?.error?.code || "Extraction failed.";
-        }
-      } catch (err: unknown) {
-        // Skip failed instance and try next
-        continue;
-      }
-    }
-
-    if (!mediaData) {
+    if (!response.ok || !data) {
       return NextResponse.json(
-        { 
-          error: lastError 
-            ? `Service error: ${lastError}` 
-            : "Failed to extract media. The video might be private, restricted, or unavailable." 
-        },
+        { error: data?.message || "Failed to process video link." },
         { status: 400 }
       );
     }
 
-    const downloadLink = mediaData.url || mediaData.picker?.[0]?.url;
+    // Map response structure from RapidAPI
+    const downloadLink = data.sd || data.hd || data.url || data.links?.sd || data.links?.hd;
+
+    if (!downloadLink) {
+      return NextResponse.json(
+        { error: "No direct media link found for this URL." },
+        { status: 400 }
+      );
+    }
 
     return NextResponse.json({
       status: "success",
-      downloadUrl: downloadLink || null,
-      picker: mediaData.picker || null,
+      downloadUrl: downloadLink,
+      picker: null,
     });
-  } catch (error: unknown) {
+  } catch (error) {
     return NextResponse.json(
-      { error: "Internal server error. Please try again later." },
+      { error: "Server internal error. Please try again later." },
       { status: 500 }
     );
   }
