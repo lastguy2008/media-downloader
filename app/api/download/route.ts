@@ -11,42 +11,56 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Call Cobalt v10 endpoint API
-    const apiResponse = await fetch("https://api.cobalt.tools/", {
-      method: "POST",
-      headers: {
-        "Accept": "application/json",
-        "Content-Type": "application/json",
-      },
-      body: JSON.stringify({
-        url: url,
-        videoQuality: "max",
-      }),
-    });
+    // List of active public instances running cobalt engine
+    const apiInstances = [
+      "https://cobalt-api.kwiatekmonster.tokyo/",
+      "https://api.cobalt.tools/",
+    ];
 
-    const data = await apiResponse.json();
+    let mediaData = null;
+    let lastError = "";
 
-    if (!apiResponse.ok || data.status === "error") {
+    // Try primary and fallback instances
+    for (const instance of apiInstances) {
+      try {
+        const response = await fetch(instance, {
+          method: "POST",
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
+          body: JSON.stringify({
+            url: url,
+            videoQuality: "max",
+          }),
+        });
+
+        const data = await response.json();
+
+        if (response.ok && data.status !== "error") {
+          mediaData = data;
+          break;
+        } else {
+          lastError = data.text || data.error?.code || "Extraction failed.";
+        }
+      } catch (err) {
+        continue;
+      }
+    }
+
+    if (!mediaData) {
       return NextResponse.json(
-        { error: data.text || data.error?.code || "Failed to process link. Platform might be unsupported or private." },
+        { error: lastError || "Failed to process link. The target media may be private or protected." },
         { status: 400 }
       );
     }
 
-    // Handle v10 response types (redirect, streamer, or picker for multi-media)
-    const downloadLink = data.url || data.picker?.[0]?.url;
-
-    if (!downloadLink && !data.picker) {
-      return NextResponse.json(
-        { error: "No download URL returned for this media item." },
-        { status: 400 }
-      );
-    }
+    const downloadLink = mediaData.url || mediaData.picker?.[0]?.url;
 
     return NextResponse.json({
       status: "success",
       downloadUrl: downloadLink,
-      picker: data.picker || null,
+      picker: mediaData.picker || null,
     });
   } catch (error) {
     return NextResponse.json(
