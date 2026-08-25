@@ -11,66 +11,61 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // List of active public instances that do not require JWT authorization tokens
+    // List of open public instances running cobalt engine without JWT requirement
     const instances = [
+      "https://cobalt-api.ayo.tf/",
+      "https://co.meow.gb.net/",
       "https://cobalt-api.kwiatekmonster.tokyo/",
-      "https://api.cobalt.tools/",
     ];
 
-    let responseData: any = null;
-    let errorMessage = "";
+    let mediaData: any = null;
+    let lastError = "";
 
+    // Iterate through instances until one returns a successful payload
     for (const instance of instances) {
       try {
-        const headers: Record<string, string> = {
-          "Accept": "application/json",
-          "Content-Type": "application/json",
-        };
-
-        // Attach API Key if configured in Vercel Environment Variables
-        if (process.env.COBALT_API_KEY) {
-          headers["Authorization"] = `Api-Key ${process.env.COBALT_API_KEY}`;
-        }
-
-        const res = await fetch(instance, {
+        const response = await fetch(instance, {
           method: "POST",
-          headers,
+          headers: {
+            "Accept": "application/json",
+            "Content-Type": "application/json",
+          },
           body: JSON.stringify({
             url: url,
             videoQuality: "max",
           }),
         });
 
-        const data = await res.json();
+        const data = await response.json();
 
-        if (res.ok && data.status !== "error") {
-          responseData = data;
+        if (response.ok && data.status !== "error") {
+          mediaData = data;
           break;
         } else {
-          errorMessage = data.text || data.error?.code || "Unable to parse link";
+          lastError = data.text || data.error?.code || "Extraction failed.";
         }
       } catch (err) {
         continue;
       }
     }
 
-    if (!responseData) {
+    if (!mediaData) {
       return NextResponse.json(
-        { error: errorMessage || "Failed to process link. The video may be private or restricted." },
+        { error: lastError || "Failed to process link. The video may be private or protected." },
         { status: 400 }
       );
     }
 
-    const downloadUrl = responseData.url || responseData.picker?.[0]?.url;
+    const downloadLink = mediaData.url || mediaData.picker?.[0]?.url;
 
     return NextResponse.json({
       status: "success",
-      downloadUrl: downloadUrl,
-      picker: responseData.picker || null,
+      downloadUrl: downloadLink,
+      picker: mediaData.picker || null,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: "Internal Server Error. Please try again later." },
+      { error: "Server internal error. Please try again later." },
       { status: 500 }
     );
   }
