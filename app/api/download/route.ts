@@ -6,7 +6,7 @@ export async function POST(req: NextRequest) {
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
-        { error: "Please provide a valid URL" },
+        { error: "Please provide a valid media URL." },
         { status: 400 }
       );
     }
@@ -31,7 +31,7 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    // Extract direct media download link
+    // Extract direct media download link from RapidAPI payload
     const downloadLink = data.sd || data.hd || data.url || data.links?.sd || data.links?.hd;
 
     if (!downloadLink) {
