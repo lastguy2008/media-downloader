@@ -11,7 +11,8 @@ export async function POST(req: NextRequest) {
       );
     }
 
-    const apiResponse = await fetch("https://api.cobalt.tools/api/json", {
+    // Call Cobalt v10 endpoint API
+    const apiResponse = await fetch("https://api.cobalt.tools/", {
       method: "POST",
       headers: {
         "Accept": "application/json",
@@ -20,7 +21,6 @@ export async function POST(req: NextRequest) {
       body: JSON.stringify({
         url: url,
         videoQuality: "max",
-        youtubeVideoCodec: "h264",
       }),
     });
 
@@ -28,14 +28,24 @@ export async function POST(req: NextRequest) {
 
     if (!apiResponse.ok || data.status === "error") {
       return NextResponse.json(
-        { error: data.text || "Failed to process link. Platform might be unsupported or private." },
+        { error: data.text || data.error?.code || "Failed to process link. Platform might be unsupported or private." },
+        { status: 400 }
+      );
+    }
+
+    // Handle v10 response types (redirect, streamer, or picker for multi-media)
+    const downloadLink = data.url || data.picker?.[0]?.url;
+
+    if (!downloadLink && !data.picker) {
+      return NextResponse.json(
+        { error: "No download URL returned for this media item." },
         { status: 400 }
       );
     }
 
     return NextResponse.json({
       status: "success",
-      downloadUrl: data.url,
+      downloadUrl: downloadLink,
       picker: data.picker || null,
     });
   } catch (error) {
