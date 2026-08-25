@@ -3,15 +3,26 @@
 import { useState } from "react";
 import { Download, Link2, Loader2, Sparkles, AlertCircle, CheckCircle2 } from "lucide-react";
 
+interface PickerItem {
+  url: string;
+  type?: string;
+}
+
+interface ApiResponse {
+  downloadUrl?: string;
+  picker?: PickerItem[];
+  error?: string;
+}
+
 export default function Home() {
-  const [url, setUrl] = useState("");
-  const [loading, setLoading] = useState(false);
-  const [result, setResult] = useState<any>(null);
+  const [url, setUrl] = useState<string>("");
+  const [loading, setLoading] = useState<boolean>(false);
+  const [result, setResult] = useState<ApiResponse | null>(null);
   const [error, setError] = useState<string | null>(null);
 
   const handleDownload = async (e: React.FormEvent) => {
     e.preventDefault();
-    if (!url) return;
+    if (!url.trim()) return;
 
     setLoading(true);
     setError(null);
@@ -21,18 +32,22 @@ export default function Home() {
       const response = await fetch("/api/download", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ url }),
+        body: JSON.stringify({ url: url.trim() }),
       });
 
-      const data = await response.json();
+      const data: ApiResponse = await response.json();
 
       if (!response.ok) {
         throw new Error(data.error || "Failed to extract video.");
       }
 
       setResult(data);
-    } catch (err: any) {
-      setError(err.message || "An unexpected error occurred.");
+    } catch (err: unknown) {
+      if (err instanceof Error) {
+        setError(err.message);
+      } else {
+        setError("An unexpected error occurred.");
+      }
     } finally {
       setLoading(false);
     }
@@ -128,13 +143,13 @@ export default function Home() {
               </a>
             )}
 
-            {result.picker && (
+            {result.picker && result.picker.length > 0 && (
               <div className="w-full space-y-3">
                 <p className="text-sm text-slate-400 text-center">Multiple items found:</p>
                 <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
-                  {result.picker.map((item: any, idx: number) => (
+                  {result.picker.map((item, idx) => (
                     <a
-                      key={idx}
+                      key={item.url || idx}
                       href={item.url}
                       target="_blank"
                       rel="noopener noreferrer"

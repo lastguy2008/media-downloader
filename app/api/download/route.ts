@@ -1,27 +1,33 @@
 import { NextRequest, NextResponse } from "next/server";
 
+interface CobaltSuccessResponse {
+  status: "redirect" | "stream" | "picker";
+  url?: string;
+  picker?: Array<{ url: string; type?: string }>;
+}
+
 export async function POST(req: NextRequest) {
   try {
     const { url } = await req.json();
 
-    if (!url || typeof url !== "string") {
+    if (!url || typeof url !== "string" || !url.startsWith("http")) {
       return NextResponse.json(
-        { error: "Please provide a valid URL" },
+        { error: "Please provide a valid media URL." },
         { status: 400 }
       );
     }
 
-    // List of open public instances running cobalt engine without JWT requirement
+    // Active open instances running Cobalt v10 engine
     const instances = [
       "https://cobalt-api.ayo.tf/",
       "https://co.meow.gb.net/",
       "https://cobalt-api.kwiatekmonster.tokyo/",
+      "https://api.cobalt.tools/",
     ];
 
-    let mediaData: any = null;
+    let mediaData: CobaltSuccessResponse | null = null;
     let lastError = "";
 
-    // Iterate through instances until one returns a successful payload
     for (const instance of instances) {
       try {
         const response = await fetch(instance, {
@@ -29,6 +35,7 @@ export async function POST(req: NextRequest) {
           headers: {
             "Accept": "application/json",
             "Content-Type": "application/json",
+            "v-api": "10",
           },
           body: JSON.stringify({
             url: url,
@@ -36,22 +43,33 @@ export async function POST(req: NextRequest) {
           }),
         });
 
+        if (!response.ok) {
+          const errData = await response.json().catch(() => null);
+          lastError = errData?.text || errData?.error?.code || `HTTP ${response.status}`;
+          continue;
+        }
+
         const data = await response.json();
 
-        if (response.ok && data.status !== "error") {
+        if (data && data.status !== "error") {
           mediaData = data;
           break;
         } else {
-          lastError = data.text || data.error?.code || "Extraction failed.";
+          lastError = data?.text || data?.error?.code || "Extraction failed.";
         }
-      } catch (err) {
+      } catch (err: unknown) {
+        // Skip failed instance and try next
         continue;
       }
     }
 
     if (!mediaData) {
       return NextResponse.json(
-        { error: lastError || "Failed to process link. The video may be private or protected." },
+        { 
+          error: lastError 
+            ? `Service error: ${lastError}` 
+            : "Failed to extract media. The video might be private, restricted, or unavailable." 
+        },
         { status: 400 }
       );
     }
@@ -60,12 +78,12 @@ export async function POST(req: NextRequest) {
 
     return NextResponse.json({
       status: "success",
-      downloadUrl: downloadLink,
+      downloadUrl: downloadLink || null,
       picker: mediaData.picker || null,
     });
-  } catch (error) {
+  } catch (error: unknown) {
     return NextResponse.json(
-      { error: "Server internal error. Please try again later." },
+      { error: "Internal server error. Please try again later." },
       { status: 500 }
     );
   }
