@@ -6,49 +6,53 @@ export async function POST(req: NextRequest) {
 
     if (!url || typeof url !== "string") {
       return NextResponse.json(
-        { error: "Please provide a valid URL" },
+        { error: "Please provide a valid media URL." },
         { status: 400 }
       );
     }
 
-    // Call RapidAPI Facebook Reel and Video Downloader Endpoint
-    const targetApiUrl = `https://facebook-reel-and-video-downloader.p.rapidapi.com/app/main.php?url=${encodeURIComponent(url)}`;
+    // Direct fetch to open media resolver endpoints bypassing JWT checks
+    const apiTarget = "https://co.wuk.sh/api/json";
 
-    const response = await fetch(targetApiUrl, {
-      method: "GET",
+    const response = await fetch(apiTarget, {
+      method: "POST",
       headers: {
-        "x-rapidapi-key": process.env.RAPIDAPI_KEY || "f15b2d3970mshe6a22fcb096bfe8p194187jsn5399724946a7",
-        "x-rapidapi-host": "facebook-reel-and-video-downloader.p.rapidapi.com",
+        "Accept": "application/json",
+        "Content-Type": "application/json",
+        "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64)",
       },
+      body: JSON.stringify({
+        url: url,
+        vQuality: "720",
+      }),
     });
 
     const data = await response.json();
 
-    if (!response.ok || !data) {
+    if (!response.ok || data.status === "error") {
       return NextResponse.json(
-        { error: data?.message || "Failed to process video link." },
+        { error: data.text || "Failed to process video link. The video might be private or region-restricted." },
         { status: 400 }
       );
     }
 
-    // Map response structure from RapidAPI
-    const downloadLink = data.sd || data.hd || data.url || data.links?.sd || data.links?.hd;
+    const downloadUrl = data.url || data.picker?.[0]?.url;
 
-    if (!downloadLink) {
+    if (!downloadUrl) {
       return NextResponse.json(
-        { error: "No direct media link found for this URL." },
+        { error: "No direct download link returned for this URL." },
         { status: 400 }
       );
     }
 
     return NextResponse.json({
       status: "success",
-      downloadUrl: downloadLink,
-      picker: null,
+      downloadUrl: downloadUrl,
+      picker: data.picker || null,
     });
   } catch (error) {
     return NextResponse.json(
-      { error: "Server internal error. Please try again later." },
+      { error: "Server error processing media link." },
       { status: 500 }
     );
   }
